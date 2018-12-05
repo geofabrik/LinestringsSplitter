@@ -64,7 +64,7 @@ Output::~Output() {
     return degree * (PI / 180.0);
 }
 
-/*static*/ double Output::distance(const double lon1, const double lat1, const double lon2, const double lat2) noexcept {
+double Output::distance(const double lon1, const double lat1, const double lon2, const double lat2) noexcept {
     if (m_geographic_mode) {
         // calculate distance on sphere
         double dx = EARTH_RADIUS_IN_METERS * deg_to_rad(lon2 - lon1);

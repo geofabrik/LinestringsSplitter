@@ -67,7 +67,7 @@ private:
 
     static double deg_to_rad(const double degree) noexcept;
 
-    static double distance(const double lon1, const double lat1, const double lon2, const double lat2) noexcept;
+    double distance(const double lon1, const double lat1, const double lon2, const double lat2) noexcept;
 
     void write_part(std::vector<double>& x_coords, std::vector<double>& y_coords, OGRFeature* feature);
 
