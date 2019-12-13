@@ -137,7 +137,6 @@ void Output::split_and_write_feature(OGRFeature* feature) {
     if (geom->getGeometryType() == wkbMultiLineString) {
         OGRMultiLineString* mls = static_cast<OGRMultiLineString*>(geom);
         for (int i = 0; i != mls->getNumGeometries(); ++i) {
-            std::cerr << '.';
             split_linestring(feature, static_cast<OGRLineString*>(mls->getGeometryRef(i)));
         }
     } else if (geom->getGeometryType() == wkbLineString) {
