@@ -29,6 +29,14 @@
 #include <ogr_api.h>
 #include <ogrsf_frmts.h>
 
+#if GDAL_VERSION_MAJOR >= 2
+    using gdal_driver_type = GDALDriver;
+    using gdal_dataset_type = GDALDataset;
+#else
+    using gdal_driver_type = OGRSFDriver;
+    using gdal_dataset_type = OGRDataSource;
+#endif
+
 struct Options {
     std::string output_filename;
 
@@ -55,7 +63,7 @@ private:
 
     bool m_geographic_mode;
 
-    OGRDataSource* m_out_data_source;
+    gdal_dataset_type* m_out_data_source;
 
     OGRLayer* m_output_layer;
 

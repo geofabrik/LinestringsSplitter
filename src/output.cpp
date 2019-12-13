@@ -29,13 +29,22 @@ Output::Output(OGRLayer* input_layer, Options& options) :
     m_geographic_mode = input_srs->IsGeographic() || options.geographic;
 
     // set up output file
-    OGRSFDriver* outDriver = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName(options.output_format.c_str());
-    if (outDriver == NULL) {
+#if GDAL_VERSION_MAJOR >= 2
+    gdal_driver_type* out_driver = GetGDALDriverManager()->GetDriverByName(options.output_format.c_str());
+#else
+    gdal_driver_type* out_driver = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName(options.output_format.c_str());
+#endif
+    if (out_driver == NULL) {
         std::cerr << "ERROR: failed to load driver for " << options.output_format << '\n';
         exit(1);
     }
+#if GDAL_VERSION_MAJOR >= 2
+    m_out_data_source = out_driver->Create(options.output_filename.c_str(), 0, 0, 0, GDT_Unknown,
+            const_cast<char**>(options.dataset_creation_options.get()));
+#else
     m_out_data_source = outDriver->CreateDataSource(options.output_filename.c_str(),
             const_cast<char**>(options.dataset_creation_options.get()));
+#endif
     if (m_out_data_source == NULL) {
         std::cerr << "ERROR: failed to create data source " << options.output_filename << '\n';
         exit(1);
@@ -57,7 +66,11 @@ Output::Output(OGRLayer* input_layer, Options& options) :
 }
 
 Output::~Output() {
+#if GDAL_VERSION_MAJOR >= 2
+    delete m_out_data_source;
+#else
     OGRDataSource::DestroyDataSource(m_out_data_source);
+#endif
 }
 
 /*static*/ double Output::deg_to_rad(const double degree) noexcept {
@@ -101,7 +114,10 @@ void Output::split_linestring(OGRFeature* feature, OGRLineString* linestring) {
         return;
     }
     if (m_options.transaction_size == 0) {
-        m_output_layer->StartTransaction();
+        if (m_output_layer->StartTransaction() != OGRERR_NONE) {
+            std::cerr << "Failed to start transaction in output layer.\n";
+            exit(1);
+        }
     }
     double length = 0.0;
     std::vector<double> x_coords;
@@ -118,8 +134,10 @@ void Output::split_linestring(OGRFeature* feature, OGRLineString* linestring) {
             length = 0.0;
             ++m_transaction_count;
             if (m_transaction_count > m_options.transaction_size) {
-                m_output_layer->CommitTransaction();
-                m_output_layer->StartTransaction();
+                if (m_output_layer->CommitTransaction() != OGRERR_NONE && m_output_layer->StartTransaction() != OGRERR_NONE) {
+                    std::cerr << "Failed to start a new transaction in output layer.\n";
+                    exit(1);
+                }
                 m_transaction_count = 0;
             }
         }
@@ -165,6 +183,9 @@ void Output::run() {
 }
 
 void Output::finalize() {
-    m_output_layer->CommitTransaction();
+    if (m_output_layer->CommitTransaction() != OGRERR_NONE) {
+        std::cerr << "Failed to commit transaction in output layer.\n";
+        exit(1);
+    }
     m_output_layer->SyncToDisk();
 }

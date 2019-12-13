@@ -163,9 +163,13 @@ int main(int argc, char* argv[]) {
     options.output_filename = argv[optind+1];
 
     OGRRegisterAll();
-
     // set up input file
-    OGRDataSource* input_data_source = OGRSFDriverRegistrar::Open(input_filename.c_str());
+#if GDAL_VERSION_MAJOR >= 2
+    gdal_dataset_type *input_data_source = static_cast<gdal_dataset_type*>(GDALOpen(input_filename.c_str(), GA_ReadOnly));
+#else
+    gdal_dataset_type* input_data_source = OGRSFDriverRegistrar::Open(input_filename.c_str());
+#endif
+
     if (input_data_source == nullptr) {
         std::cerr << "ERROR: Open of " << input_filename << " failed.\n";
         exit(1);
@@ -184,7 +188,11 @@ int main(int argc, char* argv[]) {
     Output output {input_layer, options};
     output.run();
     output.finalize();
+#if GDAL_VERSION_MAJOR >= 2
+    GDALClose(static_cast<GDALDatasetH>(input_data_source));
+#else
     OGRDataSource::DestroyDataSource(input_data_source);
+#endif
     OGRCleanupAll();
 }
 
