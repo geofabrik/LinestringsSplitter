@@ -19,43 +19,49 @@
  */
 
 #include "output.hpp"
+#include <iostream>
 
 #include <cmath>
 
 Output::Output(OGRLayer* input_layer, Options& options) :
     m_input_layer(input_layer),
-    m_options(options) {
-    OGRSpatialReference* input_srs = input_layer->GetSpatialRef();
-    m_geographic_mode = input_srs->IsGeographic() || options.geographic;
+    m_options(options),
+    m_input_srs(m_input_layer->GetSpatialRef()),
+    m_out_data_source() {
+    init();
+}
+
+void Output::init() {
+    m_geographic_mode = m_input_srs->IsGeographic() || m_options.geographic;
 
     // set up output file
 #if GDAL_VERSION_MAJOR >= 2
-    gdal_driver_type* out_driver = GetGDALDriverManager()->GetDriverByName(options.output_format.c_str());
+    gdal_driver_type* out_driver = GetGDALDriverManager()->GetDriverByName(m_options.output_format.c_str());
 #else
-    gdal_driver_type* out_driver = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName(options.output_format.c_str());
+    gdal_driver_type* out_driver = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName(m_options.output_format.c_str());
 #endif
     if (out_driver == NULL) {
-        std::cerr << "ERROR: failed to load driver for " << options.output_format << '\n';
+        std::cerr << "ERROR: failed to load driver for " << m_options.output_format << '\n';
         exit(1);
     }
 #if GDAL_VERSION_MAJOR >= 2
-    m_out_data_source = out_driver->Create(options.output_filename.c_str(), 0, 0, 0, GDT_Unknown,
-            const_cast<char**>(options.dataset_creation_options.get()));
+    m_out_data_source.reset(out_driver->Create(m_options.output_filename.c_str(), 0, 0, 0, GDT_Unknown,
+            const_cast<char**>(m_options.dataset_creation_options.get())));
 #else
-    m_out_data_source = outDriver->CreateDataSource(options.output_filename.c_str(),
-            const_cast<char**>(options.dataset_creation_options.get()));
+    m_out_data_source = outDriver->CreateDataSource(m_options.output_filename.c_str(),
+            const_cast<char**>(m_options.dataset_creation_options.get()));
 #endif
     if (m_out_data_source == NULL) {
-        std::cerr << "ERROR: failed to create data source " << options.output_filename << '\n';
+        std::cerr << "ERROR: failed to create data source " << m_options.output_filename << '\n';
         exit(1);
     }
     m_output_layer = m_out_data_source->CreateLayer(
-            input_layer->GetName(),
-            input_srs,
-            wkbUnknown,
-            const_cast<char**>(options.layer_creation_options.get())
+            m_input_layer->GetName(),
+            m_input_srs,
+            wkbLineString,
+            const_cast<char**>(m_options.layer_creation_options.get())
     );
-    OGRFeatureDefn* input_feature_def = input_layer->GetLayerDefn();
+    OGRFeatureDefn* input_feature_def = m_input_layer->GetLayerDefn();
     for (int i = 0; i < input_feature_def->GetFieldCount(); ++i) {
         OGRFieldDefn* field_def = input_feature_def->GetFieldDefn(i);
         if (m_output_layer->CreateField(field_def, TRUE) != OGRERR_NONE) {
@@ -66,9 +72,7 @@ Output::Output(OGRLayer* input_layer, Options& options) :
 }
 
 Output::~Output() {
-#if GDAL_VERSION_MAJOR >= 2
-    delete m_out_data_source;
-#else
+#if GDAL_VERSION_MAJOR < 2
     OGRDataSource::DestroyDataSource(m_out_data_source);
 #endif
 }
@@ -95,18 +99,16 @@ void Output::write_part(std::vector<double>& x_coords, std::vector<double>& y_co
         new_feature->SetField(i, feature->GetRawFieldRef(i));
     }
     std::unique_ptr<OGRLineString> result {static_cast<OGRLineString*>(OGRGeometryFactory::createGeometry(wkbLineString))};
+    result->assignSpatialReference(m_input_srs);
     // copy coordinates
     result->setNumPoints(static_cast<int>(x_coords.size()));
     result->setPoints(static_cast<int>(x_coords.size()), x_coords.data(), y_coords.data());
-    new_feature->SetGeometry(result.get());
+    new_feature->SetGeometryDirectly(result.release());
     if (m_output_layer->CreateFeature(new_feature) != OGRERR_NONE) {
+        std::cerr << "ERROR during writing a feature\n";
         exit(1);
     }
     OGRFeature::DestroyFeature(new_feature);
-    x_coords.at(0) = x_coords.back();
-    y_coords.at(0) = y_coords.back();
-    x_coords.erase(x_coords.begin() + 1, x_coords.end());
-    y_coords.erase(y_coords.begin() + 1, y_coords.end());
 }
 
 void Output::split_linestring(OGRFeature* feature, OGRLineString* linestring) {
@@ -129,7 +131,11 @@ void Output::split_linestring(OGRFeature* feature, OGRLineString* linestring) {
         x_coords.push_back(linestring->getX(i));
         y_coords.push_back(linestring->getY(i));
         if (length > m_options.max_length) {
-            write_part(x_coords, y_coords, feature);
+            std::vector<double> x_to_write {x_coords.front()};
+            std::vector<double> y_to_write {y_coords.front()};
+            std::swap(x_to_write, x_coords);
+            std::swap(y_to_write, y_coords);
+            write_part(x_to_write, y_to_write, feature);
 
             length = 0.0;
             ++m_transaction_count;

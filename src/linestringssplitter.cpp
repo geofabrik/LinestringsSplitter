@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iostream>
 
 #include "output.hpp"
 
@@ -131,11 +132,11 @@ int main(int argc, char* argv[]) {
             break;
         case dsco_option:
             dsco_vector = get_options_vector(optarg);
-            options.dataset_creation_options = std::move(options_list(dsco_vector));
+            options.dataset_creation_options = options_list(dsco_vector);
             break;
         case lco_optoin:
             lco_vector = get_options_vector(optarg);
-            options.layer_creation_options = std::move(options_list(lco_vector));
+            options.layer_creation_options = options_list(lco_vector);
             break;
         case gt_option:
             options.transaction_size = std::atoi(optarg);
@@ -162,11 +163,12 @@ int main(int argc, char* argv[]) {
     std::string input_filename =  argv[optind];
     options.output_filename = argv[optind+1];
 
-    OGRRegisterAll();
     // set up input file
 #if GDAL_VERSION_MAJOR >= 2
-    gdal_dataset_type *input_data_source = static_cast<gdal_dataset_type*>(GDALOpen(input_filename.c_str(), GA_ReadOnly));
+    GDALAllRegister();
+    gdal_dataset_type::pointer input_data_source {static_cast<gdal_dataset_type::pointer>(GDALOpenEx(input_filename.c_str(), GDAL_OF_VECTOR, NULL, NULL, NULL))};
 #else
+    OGRRegisterAll();
     gdal_dataset_type* input_data_source = OGRSFDriverRegistrar::Open(input_filename.c_str());
 #endif
 
@@ -185,6 +187,8 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
+    if (input_layer->GetSpatialRef()) std::cerr << "input has spatial ref\n";
+
     Output output {input_layer, options};
     output.run();
     output.finalize();
@@ -192,7 +196,7 @@ int main(int argc, char* argv[]) {
     GDALClose(static_cast<GDALDatasetH>(input_data_source));
 #else
     OGRDataSource::DestroyDataSource(input_data_source);
-#endif
     OGRCleanupAll();
+#endif
 }
 

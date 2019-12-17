@@ -21,7 +21,6 @@
 #ifndef OUTPUT_LAYER_HPP_
 #define OUTPUT_LAYER_HPP_
 
-#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -31,10 +30,10 @@
 
 #if GDAL_VERSION_MAJOR >= 2
     using gdal_driver_type = GDALDriver;
-    using gdal_dataset_type = GDALDataset;
+    using gdal_dataset_type = std::unique_ptr<GDALDataset>;
 #else
     using gdal_driver_type = OGRSFDriver;
-    using gdal_dataset_type = OGRDataSource;
+    using gdal_dataset_type = OGRDataSource*;
 #endif
 
 struct Options {
@@ -61,9 +60,11 @@ private:
 
     Options& m_options;
 
+    OGRSpatialReference* m_input_srs;
+
     bool m_geographic_mode;
 
-    gdal_dataset_type* m_out_data_source;
+    gdal_dataset_type m_out_data_source;
 
     OGRLayer* m_output_layer;
 
@@ -74,6 +75,8 @@ private:
     static constexpr const double EARTH_RADIUS_IN_METERS = 6372797.560856;
 
     static double deg_to_rad(const double degree) noexcept;
+
+    void init();
 
     double distance(const double lon1, const double lat1, const double lon2, const double lat2) noexcept;
 
@@ -89,7 +92,10 @@ private:
     bool skip_ring(OGRLineString* geometry);
 
 public:
+
     Output(OGRLayer* input_layer, Options& options);
+
+    Output() = delete;
 
     ~Output();
 
