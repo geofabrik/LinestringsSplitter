@@ -187,8 +187,6 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    if (input_layer->GetSpatialRef()) std::cerr << "input has spatial ref\n";
-
     Output output {input_layer, options};
     output.run();
     output.finalize();
