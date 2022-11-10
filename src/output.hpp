@@ -25,8 +25,8 @@
 #include <string>
 #include <vector>
 
-#include <ogr_api.h>
-#include <ogrsf_frmts.h>
+#include <gdal/ogr_api.h>
+#include <gdal/ogrsf_frmts.h>
 
 #if GDAL_VERSION_MAJOR >= 2
     using gdal_driver_type = GDALDriver;
