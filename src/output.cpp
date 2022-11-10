@@ -92,7 +92,7 @@ double Output::distance(const double lon1, const double lat1, const double lon2,
     return sqrt((lon2 - lon1) * (lon2 - lon1) + (lat2 - lat1) * (lat2 - lat1));
 }
 
-void Output::write_part(std::vector<double>& x_coords, std::vector<double>& y_coords, OGRFeature* feature) {
+void Output::write_part(std::vector<double>&& x_coords, std::vector<double>&& y_coords, OGRFeature* feature) {
     OGRFeature* new_feature = OGRFeature::CreateFeature(feature->GetDefnRef());
     // copy fields
     for (int i = 0; i < feature->GetDefnRef()->GetFieldCount(); ++i) {
@@ -131,11 +131,11 @@ void Output::split_linestring(OGRFeature* feature, OGRLineString* linestring) {
         x_coords.push_back(linestring->getX(i));
         y_coords.push_back(linestring->getY(i));
         if (length > m_options.max_length) {
-            std::vector<double> x_to_write {x_coords.front()};
-            std::vector<double> y_to_write {y_coords.front()};
-            std::swap(x_to_write, x_coords);
-            std::swap(y_to_write, y_coords);
-            write_part(x_to_write, y_to_write, feature);
+            write_part(std::move(x_coords), std::move(y_coords), feature);
+            x_coords = std::vector<double>();
+            y_coords = std::vector<double>();
+            x_coords.push_back(linestring->getX(i));
+            y_coords.push_back(linestring->getY(i));
 
             length = 0.0;
             ++m_transaction_count;
@@ -149,7 +149,7 @@ void Output::split_linestring(OGRFeature* feature, OGRLineString* linestring) {
         }
     }
     if (x_coords.size() > 1) {
-        write_part(x_coords, y_coords, feature);
+        write_part(std::move(x_coords), std::move(y_coords), feature);
     }
 }
 
